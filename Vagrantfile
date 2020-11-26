@@ -2,30 +2,31 @@
 # vi: set ft=ruby :
 
 SERVER_BOX = "gusztavvargadr/windows-server"
+AD_BOX = "myad"
+# AD_BOX = "corbob/active-directory"
 CLIENT_BOX = "gusztavvargadr/windows-10"
 
 Vagrant.configure("2") do |config|
-  config.vm.define "dc" do |dc|
-    dc.vm.box = SERVER_BOX
-    dc.vm.hostname = "dc01"
-    dc.vm.network "private_network", ip: "10.0.0.10"
-    dc.vm.guest = :windows
-    dc.vm.provision :shell, path: "provisioning/dc1.ps1"
-    # dc.vm.provision :reload
-    # dc.vm.provision :shell, path: "provisioning/dc2.ps1"
+  config.vm.define "dc" do |v|
+    v.vm.box = AD_BOX
+    v.vm.hostname = "dc01"
+    v.vm.network "private_network", ip: "10.0.0.10"
+    v.vm.guest = :windows
   end
-  config.vm.define "ps" do |ps|
-    ps.vm.box = SERVER_BOX
-    ps.vm.hostname = "ps01"
-    ps.vm.network "private_network", ip: "10.0.0.20"
-    ps.vm.guest = :windows
-    ps.vm.provision :shell, path: "provisioning/domainJoin.ps1"
+  config.vm.define "ps" do |v|
+    v.vm.box = SERVER_BOX
+    v.vm.hostname = "ps01"
+    v.vm.network "private_network", ip: "10.0.0.20"
+    v.vm.guest = :windows
+    v.vm.provision :shell, path: "provisioning/domainJoin.ps1"
+    v.vm.provision :reload
   end
-  config.vm.define "cl" do |cl|
-    cl.vm.box = CLIENT_BOX
-    cl.vm.hostname = "cl01"
-    cl.vm.network "private_network", ip: "10.0.0.100"
-    cl.vm.guest = :windows
-    cl.vm.provision :shell, path: "provisioning/domainJoin.ps1"
+  config.vm.define "cl" do |v|
+    v.vm.box = CLIENT_BOX
+    v.vm.hostname = "cl01"
+    v.vm.network "private_network", ip: "10.0.0.100"
+    v.vm.guest = :windows
+    v.vm.provision :shell, path: "provisioning/domainJoin.ps1"
+    v.vm.provision :reload
   end
 end
