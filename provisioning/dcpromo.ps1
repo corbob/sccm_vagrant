@@ -1,8 +1,3 @@
-$null = Add-WindowsFeature "RSAT-AD-Tools"
-$null = Add-WindowsFeature -Name "ad-domain-services" -IncludeAllSubFeature -IncludeManagementTools
-$null = Add-WindowsFeature -Name "dns" -IncludeAllSubFeature -IncludeManagementTools
-$null = Add-WindowsFeature -Name "gpmc" -IncludeAllSubFeature -IncludeManagementTools 
-
 $domainname = "contoso.com"
 $netbiosName = "CONTOSO"
 $secpasswd = ConvertTo-SecureString 'Vagrant12345' -AsPlainText -Force
