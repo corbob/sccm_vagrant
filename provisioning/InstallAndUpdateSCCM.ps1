@@ -3,7 +3,10 @@ $CM = "CMCB"
 $CMUser = "contoso\vagrant"
 $Role = "PS1"
 
+. $PSScriptRoot\funcs.ps1
+
 #region AD Configuration
+Write-Msg "Setting up AD for Configuration Manager"
 $root = (Get-ADRootDSE).defaultNamingContext
 $ou = $null 
 try { 
@@ -26,29 +29,37 @@ $arg4 = "/I:T"
 & $cmd $arg1 $arg2 $arg3 $arg4
 #endregion
 
-. $PSScriptRoot\funcs.ps1
-
 #region Prerequisites
+
+# Files directory can be used as storage for some of the files used so you don't need to download them every time...
+Write-Msg "Copying files to root of C:\"
+robocopy C:\vagrant\files c:\ConfigMgrFiles /mir
+# Start with SQL Server Installation.
+Write-Msg "Installing SQL Server 2019"
+choco install sql-server-2019 -y --params="'/TCPENABLED=`"1`" /IsoPath:c:\ConfigMgrFiles\sql.iso'"
 
 $_adkpath = 'C:\ConfigMgrFiles\adk.exe'
 $_adkWinPEpath = 'C:\ConfigMgrFiles\winpe.exe'
 if (!(Test-Path $_adkpath)) {
+    Write-Msg "Downloading ADK"
     $adkurl = "https://go.microsoft.com/fwlink/?linkid=2120254"
     Invoke-WebRequest -Uri $adkurl -OutFile $_adkpath
 }
 if (!(Test-Path $_adkWinPEpath)) {
+    Write-Msg "Downloading Windows PE"
     $adkurl = "https://go.microsoft.com/fwlink/?linkid=2120253"
     Invoke-WebRequest -Uri $adkurl -OutFile $_adkWinPEpath
 }
 
 #region Install DeploymentTools
+Write-Msg "Installing ADK"
 $adkinstallpath = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools"
 while (!(Test-Path $adkinstallpath)) {
     $cmd = $_adkpath
     $arg1 = "/Features"
     $arg2 = "OptionId.DeploymentTools"
     $arg3 = "/q"
-
+    
     try {
         Write-Verbose "Installing ADK DeploymentTools..."
         & $cmd $arg1 $arg2 $arg3 | out-null
@@ -58,7 +69,7 @@ while (!(Test-Path $adkinstallpath)) {
         $ErrorMessage = $_.Exception.Message
         throw "Failed to install ADK DeploymentTools with below error: $ErrorMessage"
     }
-
+    
     Start-Sleep -Seconds 10
 }
 
@@ -66,12 +77,13 @@ while (!(Test-Path $adkinstallpath)) {
 
 #region Install UserStateMigrationTool
 $adkinstallpath = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\User State Migration Tool"
+Write-Msg "Installing USMT"
 while (!(Test-Path $adkinstallpath)) {
     $cmd = $_adkpath
     $arg1 = "/Features"
     $arg2 = "OptionId.UserStateMigrationTool"
     $arg3 = "/q"
-
+    
     try {
         Write-Verbose "Installing ADK UserStateMigrationTool..."
         & $cmd $arg1 $arg2 $arg3 | out-null
@@ -81,7 +93,7 @@ while (!(Test-Path $adkinstallpath)) {
         $ErrorMessage = $_.Exception.Message
         throw "Failed to install ADK UserStateMigrationTool with below error: $ErrorMessage"
     }
-
+    
     Start-Sleep -Seconds 10
 }
 
@@ -89,12 +101,13 @@ while (!(Test-Path $adkinstallpath)) {
 
 #region Install WindowsPreinstallationEnvironment
 $adkinstallpath = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment"
+Write-Msg "Installing WinPE"
 while (!(Test-Path $adkinstallpath)) {
     $cmd = $_adkWinPEpath
     $arg1 = "/Features"
     $arg2 = "OptionId.WindowsPreinstallationEnvironment"
     $arg3 = "/q"
-
+    
     try {
         Write-Verbose "Installing WindowsPreinstallationEnvironment for ADK..."
         & $cmd $arg1 $arg2 $arg3 | out-null
@@ -104,7 +117,7 @@ while (!(Test-Path $adkinstallpath)) {
         $ErrorMessage = $_.Exception.Message
         throw "Failed to install WindowsPreinstallationEnvironment for ADK with below error: $ErrorMessage"
     }
-
+    
     Start-Sleep -Seconds 10
 }
 
@@ -126,6 +139,7 @@ if (!(Test-Path $cmsourcepath)) {
     Start-Process -Filepath ($cmpath) -ArgumentList ('/Auto "' + $cmsourcepath + '"') -wait
 }
 $CMINIPath = "c:\$CM\Standalone.ini"
+Write-Msg "Installing WinPE"
 Write-Msg "Check ini file."
 
 $cmini = @'
@@ -191,19 +205,7 @@ else {
     $cmini = $cmini.Replace('%SQLInstance%', $tinstance)
 }
 $CMInstallationFile = "c:\$CM\SMSSETUP\BIN\X64\Setup.exe"
-$cmini > $CMINIPath 
-
-#region SQL Config
-# Trying without this code because we're telling it to enable with the install...
-# Import-Module SqlServer
-# $smo = 'Microsoft.SqlServer.Management.Smo.'  
-# $wmi = new-object ($smo + 'Wmi.ManagedComputer').  
-
-# # Enable the TCP protocol on the default instance.  
-# $uri = "ManagedComputer[@Name='" + (get-item env:\computername).Value + "']/ ServerInstance[@Name='MSSQLSERVER']/ServerProtocol[@Name='Tcp']"  
-# $Tcp = $wmi.GetSmoObject($uri)  
-# $Tcp.IsEnabled = $true  
-# $Tcp.Alter()  
+$cmini > $CMINIPath  
 
 $_SQLInstanceName = $inst
 $query = "Name = '" + $_SQLInstanceName.ToUpper() + "'"
@@ -215,50 +217,50 @@ if ($services.State -eq 'Running') {
     $sqlserveragentservices = Get-WmiObject win32_service -Filter "Name = 'SQLSERVERAGENT'"
     if ($null -ne $sqlserveragentservices) {
         if ($sqlserveragentservices.State -eq 'Running') {
-            Write-Verbose "[$(Get-Date -format HH:mm:ss)] SQLSERVERAGENT need to be stopped first"
+            Write-Msg "SQLSERVERAGENT need to be stopped first"
             $Result = $sqlserveragentservices.StopService()
-            Write-Verbose "[$(Get-Date -format HH:mm:ss)] Stopping SQLSERVERAGENT.."
+            Write-Msg " Stopping SQLSERVERAGENT.."
             if ($Result.ReturnValue -eq '0') {
                 $sqlserveragentflag = 1
-                Write-Verbose "[$(Get-Date -format HH:mm:ss)] Stopped"
+                Write-Msg " Stopped"
             }
         }
     }
     $Result = $services.StopService()
-    Write-Verbose "[$(Get-Date -format HH:mm:ss)] Stopping SQL Server services.."
+    Write-Msg " Stopping SQL Server services.."
     if ($Result.ReturnValue -eq '0') {
-        Write-Verbose "[$(Get-Date -format HH:mm:ss)] Stopped"
+        Write-Msg " Stopped"
     }
 
-    Write-Verbose "[$(Get-Date -format HH:mm:ss)] Changing the services account..."
+    Write-Msg " Changing the services account..."
             
     $Result = $services.change($null, $null, $null, $null, $null, $null, "LocalSystem", $null, $null, $null, $null) 
     if ($Result.ReturnValue -eq '0') {
-        Write-Verbose "[$(Get-Date -format HH:mm:ss)] Successfully Change the services account"
+        Write-Msg " Successfully Change the services account"
         if ($sqlserveragentflag -eq 1) {
-            Write-Verbose "[$(Get-Date -format HH:mm:ss)] Starting SQLSERVERAGENT.."
+            Write-Msg " Starting SQLSERVERAGENT.."
             $Result = $sqlserveragentservices.StartService()
             if ($Result.ReturnValue -eq '0') {
-                Write-Verbose "[$(Get-Date -format HH:mm:ss)] Started"
+                Write-Msg " Started"
             }
         }
         $Result = $services.StartService()
-        Write-Verbose "[$(Get-Date -format HH:mm:ss)] Starting SQL Server services.."
+        Write-Msg " Starting SQL Server services.."
         while ($Result.ReturnValue -ne '0') {
             $returncode = $Result.ReturnValue
-            Write-Verbose "[$(Get-Date -format HH:mm:ss)] Return $returncode , will try again"
+            Write-Msg " Return $returncode , will try again"
             Start-Sleep -Seconds 10
             $Result = $services.StartService()
         }
-        Write-Verbose "[$(Get-Date -format HH:mm:ss)] Started"
+        Write-Msg " Started"
     }
 }
 
 #endregion
 
-Write-Msg "Installing.."
-# Start-Process -Filepath ($CMInstallationFile) -ArgumentList ('/NOUSERINPUT /script "' + $CMINIPath + '"') -wait
-Start-Process -Filepath ($CMInstallationFile) -ArgumentList ('/script "' + $CMINIPath + '"') -wait
+Write-Msg "Installing ConfigMgr..."
+Start-Process -Filepath ($CMInstallationFile) -ArgumentList ('/NOUSERINPUT /script "' + $CMINIPath + '"') -wait
+# Start-Process -Filepath ($CMInstallationFile) -ArgumentList ('/script "' + $CMINIPath + '"') -wait
 
 Write-Msg "Finished installing CM."
 
@@ -297,9 +299,6 @@ while ($null -eq (Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction Si
 Set-Location "$($SiteCode):\" @initParams
 
 #Add domain user as CM administrative user
-Write-Msg "Setting $CMUser as CM administrative user."
-New-CMAdministrativeUser -Name $CMUser -RoleName "Full Administrator" -SecurityScopeName "All", "All Systems", "All Users and User Groups"
-Write-Msg "Done"
 
 $upgradingfailed = $false
 $originalbuildnumber = ""
@@ -544,3 +543,16 @@ if ($downloadretrycount -ge 2) {
     (Write-Msg "Upgrade $($updatepack.Name) failed to start downloading")
     throw
 }
+
+# Now that we're done, we'll remove the files...
+mkdir $env:temp\emptyFolder
+robocopy /mir $env:temp\emptyFolder C:\CMCB
+robocopy /mir $env:temp\emptyFolder C:\ConfigMgrFiles
+
+Start-Process -FilePath "C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\AdminUI.ExtensionInstaller.exe" -ArgumentList @("SiteServerName=$($env:COMPUTERNAME).contoso.com", "ReinstallConsole")
+
+while (!(Get-Process "Microsoft.ConfigurationManagement" -ErrorAction Ignore)){
+    Write-Msg "We're still waiting for the client updater to finish..."
+    start-sleep -Seconds 60
+}
+Get-Process "Microsoft.ConfigurationManagement" | Stop-Process

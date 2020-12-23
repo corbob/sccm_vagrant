@@ -2,30 +2,21 @@
 # vi: set ft=ruby :
 
 SERVER_BOX = "gusztavvargadr/windows-server"
-CLIENT_BOX = "gusztavvargadr/windows-10"
+CPUS = 4
+MEMS = 8192
 
 Vagrant.configure("2") do |config|
-  config.vm.define "dc" do |v|
-    v.vm.box = SERVER_BOX
-    v.vm.hostname = "dc01"
-    v.vm.network "private_network", ip: "10.0.0.10"
-    v.vm.guest = :windows
-    v.vm.provider :virtualbox do |hv|
-      hv.cpus = 2
-      hv.memory = 8192
-    end
-    v.vm.provision :shell, :path => "provisioning/provision.ps1"
+  config.vm.box = SERVER_BOX
+  config.vm.hostname = "dc01"
+  config.vm.guest = :windows
+  # This is stupid... We shouldn't have to repeat outselves...
+  config.vm.provider :virtualbox do |hv|
+    hv.cpus = CPUS
+    hv.memory = MEMS
   end
-  # config.vm.define "ps" do |v|
-  #   v.vm.box = SERVER_BOX
-  #   v.vm.hostname = "ps01"
-  #   v.vm.network "private_network", ip: "10.0.0.20"
-  #   v.vm.guest = :windows
-  # end
-  # config.vm.define "cl" do |v|
-  #   v.vm.box = CLIENT_BOX
-  #   v.vm.hostname = "cl01"
-  #   v.vm.network "private_network", ip: "10.0.0.30"
-  #   v.vm.guest = :windows
-  # end
+  config.vm.provider :hyperv do |hv|
+    hv.cpus = CPUS
+    hv.memory = MEMS
+  end
+  config.vm.provision :shell, :path => "provisioning/provision.ps1"
 end

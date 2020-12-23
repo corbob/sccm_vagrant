@@ -1,9 +1,3 @@
-# Files directory can be used as storage for some of the files used so you don't need to download them every time...
-Write-Host "Copying files to root of C:\"
-robocopy C:\vagrant\files c:\ConfigMgrFiles /mir
-
-Write-Host "Done copying files to root of C:\"
-
 # Install Chocolatey... Because Chocolatey!!!
 Write-Host "Installing Chocolatey"
 Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -11,6 +5,8 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer\Main" -Name "
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
 Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
 Write-Host "Done Installing Chocolatey"
+
+choco install sysinternals -y
 
 # # Set PSGallery to trusted so we can install the SQL Server module.
 # Write-Host "Install SQLServer PS Module"
