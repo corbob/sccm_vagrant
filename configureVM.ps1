@@ -1,5 +1,8 @@
 . $PSScriptRoot\provisioning\funcs.ps1
 
+Write-Msg "Welcome to the configuration script for this environment. Messages with a 'green' timestamp are in your local time, and running locally on your system."
+Write-Msg "If the timestamp is the same color as the rest of the text, it is running inside the VM, and will be in UTC timezone."
+
 Write-Msg "Stand up the vagrant box"
 vagrant up
 Write-Msg "We are going to install AD on the server. This **WILL** result in an exception... We will be ignoring it."
