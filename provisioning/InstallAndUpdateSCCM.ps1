@@ -1,3 +1,4 @@
+$buildStart = Get-Date
 $DomainFullName = "contoso.com"
 $CM = "CMCB"
 $CMUser = "contoso\vagrant"
@@ -544,6 +545,85 @@ if ($downloadretrycount -ge 2) {
     throw
 }
 
+$key = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry32)
+$subKey = $key.OpenSubKey("SOFTWARE\Microsoft\ConfigMgr10\Setup")
+$uiInstallPath = $subKey.GetValue("UI Installation Directory")
+$modulePath = $uiInstallPath + "bin\ConfigurationManager.psd1"
+# Import the ConfigurationManager.psd1 module 
+if ($null -eq (Get-Module ConfigurationManager)) {
+    Import-Module $modulePath
+}
+$key = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
+$subKey = $key.OpenSubKey("SOFTWARE\Microsoft\SMS\Identification")
+$SiteCode = $subKey.GetValue("Site Code")
+$MachineName = $env:COMPUTERNAME + ".contoso.com"
+$initParams = @{}
+
+$ProviderMachineName = $env:COMPUTERNAME + ".contoso.com"
+New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $ProviderMachineName @initParams
+while ($null -eq (Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue)) {
+    Write-Msg "Retry in 10s to set PS Drive. Please wait."
+    Start-Sleep -Seconds 10
+    New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $ProviderMachineName @initParams
+}
+
+Set-Location "$($SiteCode):\" @initParams
+
+$Date = [DateTime]::Now.AddYears(30)
+$SystemServer = Get-CMSiteSystemServer -SiteSystemServerName $MachineName
+if ((get-cmdistributionpoint -SiteSystemServerName $MachineName).count -ne 1) {
+    #Install DP
+    Write-Msg "Adding distribution point on $MachineName ..."
+    Add-CMDistributionPoint -InputObject $SystemServer -CertificateExpirationTimeUtc $Date
+    Write-Msg "Finished adding distribution point on $MachineName ..."
+
+
+    if ((get-cmdistributionpoint -SiteSystemServerName $MachineName).count -eq 1) {
+        Write-Msg "Finished running the script."
+    }
+    else {
+        Write-Msg "Failed to run the script."
+    }
+}
+else {
+    Write-Msg "$MachineName is already a distribution point , skip running this script."
+}
+
+#Get Database name
+$DatabaseValue = 'Database Name'
+$DatabaseName = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\SMS\SQL Server' -Name 'Database Name').$DatabaseValue
+#Get Instance Name
+$InstanceValue = 'Service Name'
+$InstanceName = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\SMS\SQL Server' -Name 'Service Name').$InstanceValue
+
+if ((Get-CMManagementPoint -SiteSystemServerName $MachineName).count -ne 1) {
+    #Install MP
+    Write-Msg "Adding management point on $MachineName ..."
+    Add-CMManagementPoint -InputObject $SystemServer -CommunicationType Http
+    Write-Msg "Finished adding management point on $MachineName ..."
+    
+    $connectionString = "Data Source=.; Integrated Security=SSPI; Initial Catalog=$DatabaseName"
+    if ($InstanceName.ToUpper() -ne 'MSSQLSERVER') {
+        $connectionString = "Data Source=.\$InstanceName; Integrated Security=SSPI; Initial Catalog=$DatabaseName"
+    }
+    $connection = new-object system.data.SqlClient.SQLConnection($connectionString)
+    $sqlCommand = "INSERT INTO [Feature_EC] (FeatureID,Exposed) values (N'49E3EF35-718B-4D93-A427-E743228F4855',0)"
+    $connection.Open() | Out-Null
+    $command = new-object system.data.sqlclient.sqlcommand($sqlCommand, $connection)
+    $command.ExecuteNonQuery() | Out-Null
+
+    if ((Get-CMManagementPoint -SiteSystemServerName $MachineName).count -eq 1) {
+        Write-Msg "Finished running the script."
+    }
+    else {
+        Write-Msg "Failed to run the script."
+    }
+}
+else {
+    Write-Msg "$MachineName is already a management point , skip running this script."
+}
+
+
 # Now that we're done, we'll remove the files...
 mkdir $env:temp\emptyFolder
 robocopy /mir $env:temp\emptyFolder C:\CMCB
@@ -556,3 +636,8 @@ while (!(Get-Process "Microsoft.ConfigurationManagement" -ErrorAction Ignore)){
     start-sleep -Seconds 60
 }
 Get-Process "Microsoft.ConfigurationManagement" | Stop-Process
+$buildStop = Get-Date
+
+$buildDuration = New-TimeSpan -Start $buildStart -End $buildStop
+
+Write-Msg "We are officially done the setup of the system after $($buildDuration.TotalMinutes) minutes"
