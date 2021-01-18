@@ -16,11 +16,11 @@ $files = @(
         file = 'CMCB.exe'
     }
 )
-if (!(Test-Path $PSScriptRoot\Files)) {
-    mkdir $PSScriptRoot\Files
+if (!(Test-Path $PSScriptRoot/Files)) {
+    mkdir $PSScriptRoot/Files
 }
 foreach ($entry in $files) {
-    $outFile = "$PSScriptRoot\Files\$($entry.file)"
+    $outFile = "$PSScriptRoot/Files/$($entry.file)"
     if (!(Test-Path $outFile)) {
         Invoke-WebRequest -Uri $entry.url -OutFile $outFile
     }
